@@ -499,6 +499,7 @@ const CATALOG: Product[] = [
 type ProductState = {
   products: Product[]
   addProduct: (input: Omit<Product, 'id'>) => void
+  updateProduct: (id: string, patch: Partial<Omit<Product, 'id'>>) => void
 }
 
 const useProductStore = create<ProductState>()(
@@ -518,6 +519,13 @@ const useProductStore = create<ProductState>()(
               id,
             },
           ],
+        })
+      },
+      updateProduct: (id, patch) => {
+        set({
+          products: get().products.map((p) =>
+            p.id === id ? { ...p, ...patch } : p,
+          ),
         })
       },
     }),
@@ -601,26 +609,37 @@ const useCartStore = create<CartState>()(
 type User = {
   email: string
   isAdmin: boolean
+  password: string
 }
 
 type AuthState = {
   user?: User
   register: (email: string, password: string) => void
+  login: (email: string, password: string) => boolean
   logout: () => void
+  reset: () => void
 }
 
 const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: undefined,
-      register: (email, _password) => {
+      register: (email, password) => {
         // NOTE: demo only, do NOT store plain passwords in production apps.
         const isAdmin = email.toLowerCase().includes('admin')
-        set({ user: { email, isAdmin } })
+        set({ user: { email, isAdmin, password } })
+      },
+      login: (email, password) => {
+        const u = get().user
+        if (!u) return false
+        if (u.email !== email) return false
+        if (u.password !== password) return false
+        return true
       },
       logout: () => set({ user: undefined }),
+      reset: () => set({ user: undefined }),
     }),
-    { name: 'furniture-auth' },
+    { name: 'furniture-auth-v2' },
   ),
 )
 
@@ -721,8 +740,10 @@ const AuthScreen = () => {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [mode, setMode] = useState<'login' | 'register'>('register')
   const user = useAuthStore((s) => s.user)
   const register = useAuthStore((s) => s.register)
+  const login = useAuthStore((s) => s.login)
   const goTo = useNavStore((s) => s.goTo)
   const lang = useLangStore((s) => s.lang)
 
@@ -743,16 +764,29 @@ const AuthScreen = () => {
       )
       return
     }
-    if (user && user.email === email) {
-      setError(
-        isRu
-          ? 'Этот e‑mail уже зарегистрирован.'
-          : 'This e‑mail is already registered.',
-      )
-      return
+    if (mode === 'register') {
+      if (user && user.email === email) {
+        setError(
+          isRu
+            ? 'Этот e‑mail уже зарегистрирован. Используйте вход.'
+            : 'This e‑mail is already registered. Use login instead.',
+        )
+        return
+      }
+      register(email, password)
+      goTo('home')
+    } else {
+      const ok = login(email, password)
+      if (!ok) {
+        setError(
+          isRu
+            ? 'Неверная почта или пароль.'
+            : 'Incorrect e‑mail or password.',
+        )
+        return
+      }
+      goTo('home')
     }
-    register(email, password)
-    goTo('home')
   }
 
   return (
@@ -762,13 +796,47 @@ const AuthScreen = () => {
           <LanguageToggle />
         </div>
         <div className="glass-card w-full max-w-sm px-6 py-6">
+          <div className="mb-4 flex items-center justify-between text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className={`flex-1 rounded-full px-3 py-1 ${
+                mode === 'login'
+                  ? 'bg-primary text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {isRu ? 'Вход' : 'Login'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('register')}
+              className={`ml-2 flex-1 rounded-full px-3 py-1 ${
+                mode === 'register'
+                  ? 'bg-primary text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {isRu ? 'Регистрация' : 'Sign up'}
+            </button>
+          </div>
           <h2 className="mb-1 text-center text-xl font-semibold text-slate-900">
-            {isRu ? 'Регистрация' : 'Create account'}
+            {mode === 'register'
+              ? isRu
+                ? 'Создайте аккаунт'
+                : 'Create account'
+              : isRu
+                ? 'Войдите в аккаунт'
+                : 'Login to your account'}
           </h2>
           <p className="mb-6 text-center text-xs text-slate-500">
-            {isRu
-              ? 'Введите почту и придумайте пароль, чтобы продолжить покупки.'
-              : 'Enter your e-mail and create a password to continue shopping.'}
+            {mode === 'register'
+              ? isRu
+                ? 'Введите почту и придумайте пароль, чтобы продолжить покупки.'
+                : 'Enter your e-mail and create a password to continue shopping.'
+              : isRu
+                ? 'Введите почту и пароль от уже созданного аккаунта.'
+                : 'Enter the e-mail and password you used when you signed up.'}
           </p>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
@@ -814,7 +882,13 @@ const AuthScreen = () => {
               </p>
             )}
             <button type="submit" className="primary-btn mt-2 w-full">
-              {isRu ? 'Продолжить' : 'Continue'}
+              {mode === 'register'
+                ? isRu
+                  ? 'Зарегистрироваться'
+                  : 'Sign up'
+                : isRu
+                  ? 'Войти'
+                  : 'Login'}
             </button>
             <button
               type="button"
@@ -928,7 +1002,7 @@ const HomeScreen = () => {
               <p className="text-sm font-semibold text-slate-900">
                 {t.homeBrandSubtitle}
               </p>
-            </div>
+      </div>
           </div>
           <div className="flex items-center gap-2">
             <LanguageToggle />
@@ -937,7 +1011,7 @@ const HomeScreen = () => {
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow-soft ring-1 ring-slate-100"
             >
               <User size={18} />
-            </button>
+        </button>
           </div>
         </div>
         {/* Search + cart */}
@@ -1050,7 +1124,7 @@ const HomeScreen = () => {
                             style={{ backgroundColor: color.hex }}
                           />
                         ))}
-                      </div>
+      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -1583,6 +1657,19 @@ const ProfileScreen = () => {
               goTo('onboarding')
             }}
           />
+          <ProfileRow
+            icon={<LogOut className="h-4 w-4 text-slate-600" />}
+            label={lang === 'ru' ? 'Очистить аккаунт' : 'Clear account'}
+            hint={
+              lang === 'ru'
+                ? 'Удалить сохранённый аккаунт на этом устройстве'
+                : 'Remove saved account on this device'
+            }
+            onClick={() => {
+              useAuthStore.getState().reset()
+              goTo('onboarding')
+            }}
+          />
           {user?.isAdmin && (
             <ProfileRow
               icon={<Settings className="h-4 w-4 text-primary" />}
@@ -1845,6 +1932,7 @@ const AdminScreen = () => {
   const orders = useOrderStore((s) => s.orders)
   const products = useProductStore((s) => s.products)
   const addProduct = useProductStore((s) => s.addProduct)
+  const updateProduct = useProductStore((s) => s.updateProduct)
   const isRu = lang === 'ru'
 
   const [name, setName] = useState('')
@@ -1860,6 +1948,9 @@ const AdminScreen = () => {
   const [color3Name, setColor3Name] = useState('')
   const [color3Hex, setColor3Hex] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
+  const [editedProductId, setEditedProductId] = useState<string | null>(null)
+  const [editMainImage, setEditMainImage] = useState('')
+  const [editGallery, setEditGallery] = useState('')
 
   if (!user?.isAdmin) {
     return (
@@ -2147,6 +2238,114 @@ const AdminScreen = () => {
               </button>
             </div>
           </form>
+        </div>
+
+        <div className="glass-card px-5 py-4">
+          <p className="mb-2 text-sm font-semibold text-slate-900">
+            {isRu ? 'Фотографии товаров' : 'Product photos'}
+          </p>
+          {products.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              {isRu
+                ? 'Пока нет товаров для редактирования.'
+                : 'There are no products to edit yet.'}
+            </p>
+          ) : (
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {products.map((p) => {
+                const isActive = editedProductId === p.id
+                return (
+                  <div
+                    key={p.id}
+                    className="rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={p.image}
+                        alt={p.name}
+                        className="h-10 w-10 rounded-lg object-cover"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-900 line-clamp-1">
+                          {p.name}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {p.category} · ${p.price}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-[11px] font-medium text-primary hover:text-primary/80"
+                        onClick={() => {
+                          setEditedProductId(p.id)
+                          setEditMainImage(p.image)
+                          setEditGallery((p.gallery ?? []).join(', '))
+                        }}
+                      >
+                        {isRu ? 'Редактировать' : 'Edit'}
+                      </button>
+                    </div>
+                    {isActive && (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-slate-600">
+                            {isRu ? 'Главное фото (URL)' : 'Main image (URL)'}
+                          </label>
+                          <input
+                            value={editMainImage}
+                            onChange={(e) => setEditMainImage(e.target.value)}
+                            className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                        <div className="space-y-1 sm:col-span-1">
+                          <label className="text-[11px] font-medium text-slate-600">
+                            {isRu
+                              ? 'Галерея (через запятую)'
+                              : 'Gallery (comma separated)'}
+                          </label>
+                          <input
+                            value={editGallery}
+                            onChange={(e) => setEditGallery(e.target.value)}
+                            className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                        <div className="sm:col-span-2 flex justify-end gap-2">
+                          <button
+                            type="button"
+                            className="text-[11px] text-slate-500 hover:text-slate-700"
+                            onClick={() => {
+                              setEditedProductId(null)
+                              setEditMainImage('')
+                              setEditGallery('')
+                            }}
+                          >
+                            {isRu ? 'Отменить' : 'Cancel'}
+                          </button>
+                          <button
+                            type="button"
+                            className="primary-btn px-4 py-1 text-[11px]"
+                            onClick={() => {
+                              const galleryArr = editGallery
+                                .split(',')
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                              updateProduct(p.id, {
+                                image: editMainImage || p.image,
+                                gallery: galleryArr,
+                              })
+                              setEditedProductId(null)
+                            }}
+                          >
+                            {isRu ? 'Сохранить фото' : 'Save photos'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </ScreenShell>
