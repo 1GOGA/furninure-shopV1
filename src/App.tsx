@@ -24,6 +24,7 @@ type Screen =
   | 'home'
   | 'details'
   | 'cart'
+  | 'checkout'
   | 'profile'
   | 'notifications'
   | 'favorites'
@@ -634,7 +635,9 @@ const useAuthStore = create<AuthState>()(
       user: undefined,
       register: (email, password) => {
         // NOTE: demo only, do NOT store plain passwords in production apps.
-        const isAdmin = email.toLowerCase().includes('admin')
+        const isAdmin =
+          email.toLowerCase() === 'admin@furniture.local' &&
+          password === 'admin123'
         set({ user: { email, isAdmin, password } })
       },
       login: (email, password) => {
@@ -678,22 +681,30 @@ type Order = {
   createdAt: string
   total: number
   items: CartItem[]
+  name?: string
+  email?: string
+  address?: string
+  promoCode?: string
 }
 
 type OrderState = {
   orders: Order[]
-  createOrder: (items: CartItem[], total: number) => void
+  createOrder: (
+    items: CartItem[],
+    total: number,
+    meta?: { name?: string; email?: string; address?: string; promoCode?: string },
+  ) => void
 }
 
 const useOrderStore = create<OrderState>()(
   persist(
     (set, get) => ({
       orders: [],
-      createOrder: (items, total) => {
+      createOrder: (items, total, meta) => {
         const id = `order-${Date.now()}`
         const createdAt = new Date().toISOString()
         set({
-          orders: [...get().orders, { id, createdAt, total, items }],
+          orders: [...get().orders, { id, createdAt, total, items, ...meta }],
         })
       },
     }),
@@ -1554,7 +1565,6 @@ const CartScreen = () => {
   const { items, updateQuantity, removeItem } = useCartStore()
   const lang = useLangStore((s) => s.lang)
   const t = TRANSLATIONS[lang]
-  const createOrder = useOrderStore((s) => s.createOrder)
   const products = useProductStore((s) => s.products)
 
   const itemsWithProduct = items
@@ -1668,9 +1678,7 @@ const CartScreen = () => {
             className="primary-btn mt-1 w-full disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => {
               if (!items.length) return
-              createOrder(items, subtotal)
-              useCartStore.getState().clear()
-              goTo('orders')
+              goTo('checkout')
             }}
           >
             {t.proceedToCheckout}
@@ -2077,6 +2085,14 @@ const OrdersScreen = () => {
                   <p className="text-xs text-slate-500">
                     {new Date(order.createdAt).toLocaleString()}
                   </p>
+                  {order.name && (
+                    <p className="text-xs text-slate-500">
+                      {order.name} · {order.email}
+                    </p>
+                  )}
+                  {order.address && (
+                    <p className="text-xs text-slate-500">{order.address}</p>
+                  )}
                   <p className="mt-1 text-xs text-slate-500">
                     {isRu
                       ? `${order.items.length} позиций в заказе`
@@ -2091,6 +2107,191 @@ const OrdersScreen = () => {
   )
 }
 
+// CHECKOUT
+const CheckoutScreen = () => {
+  const lang = useLangStore((s) => s.lang)
+  const goTo = useNavStore((s) => s.goTo)
+  const { items, clear } = useCartStore()
+  const createOrder = useOrderStore((s) => s.createOrder)
+  const products = useProductStore((s) => s.products)
+
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [address, setAddress] = useState('')
+  const [promo, setPromo] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const isRu = lang === 'ru'
+
+  const itemsWithProduct = items
+    .map((item) => {
+      const product = products.find((p) => p.id === item.productId)
+      if (!product) return null
+      return { item, product }
+    })
+    .filter((v): v is { item: CartItem; product: Product } => Boolean(v))
+
+  const subtotal = itemsWithProduct.reduce(
+    (sum, { item, product }) => sum + item.quantity * product.price,
+    0,
+  )
+
+  const discount = useMemo(() => {
+    const code = promo.trim().toUpperCase()
+    if (code === 'WELCOME10') return subtotal * 0.1
+    if (code === 'FREESHIP') return 15
+    return 0
+  }, [promo, subtotal])
+
+  const total = Math.max(0, subtotal - discount)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!name || !email || !address) {
+      setError(
+        isRu
+          ? 'Заполните имя, e‑mail и адрес доставки.'
+          : 'Please fill in name, e‑mail and shipping address.',
+      )
+      return
+    }
+    createOrder(items, total, { name, email, address, promoCode: promo })
+    clear()
+    goTo('orders')
+  }
+
+  if (!items.length) {
+    return (
+      <ScreenShell>
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <p className="text-sm text-slate-500">
+            {isRu ? 'Ваша корзина пуста.' : 'Your cart is empty.'}
+          </p>
+          <button
+            className="mt-4 primary-btn"
+            onClick={() => goTo('home')}
+          >
+            {isRu ? 'Вернуться в каталог' : 'Back to catalog'}
+          </button>
+        </div>
+      </ScreenShell>
+    )
+  }
+
+  return (
+    <ScreenShell>
+      <div className="flex flex-1 flex-col gap-4 pb-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => goTo('cart')}
+            className="text-xs font-medium text-slate-500 hover:text-slate-700"
+          >
+            ← {isRu ? 'Назад в корзину' : 'Back to cart'}
+          </button>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            {isRu ? 'Оформление' : 'Checkout'}
+          </p>
+          <CartButton />
+        </div>
+
+        <form
+          onSubmit={handleSubmit}
+          className="glass-card grid gap-3 px-4 py-4 sm:grid-cols-2"
+        >
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {isRu ? 'Контакты' : 'Contact'}
+            </p>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-600">
+                {isRu ? 'Имя' : 'Name'}
+              </label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-600">
+                E‑mail
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-600">
+                {isRu ? 'Адрес доставки' : 'Shipping address'}
+              </label>
+              <textarea
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="h-20 w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {isRu ? 'Итого' : 'Summary'}
+            </p>
+            <div className="space-y-1 rounded-xl bg-surface px-3 py-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span>{isRu ? 'Товары' : 'Items'}</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>{isRu ? 'Скидка' : 'Discount'}</span>
+                <span className={discount ? 'text-emerald-600' : ''}>
+                  -${discount.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm font-semibold">
+                <span>{isRu ? 'К оплате' : 'Total'}</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-600">
+                {isRu ? 'Промокод' : 'Promo code'}
+              </label>
+              <input
+                value={promo}
+                onChange={(e) => setPromo(e.target.value)}
+                className="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                placeholder={isRu ? 'WELCOME10 или FREESHIP' : 'WELCOME10 or FREESHIP'}
+              />
+            </div>
+
+            {error && (
+              <p className="text-[11px] text-red-500" aria-live="polite">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="primary-btn mt-1 w-full disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRu ? 'Подтвердить заказ' : 'Confirm order'}
+            </button>
+            <p className="text-[11px] text-slate-400">
+              {isRu
+                ? 'Оплата на этом демо‑сайте не взимается. Данные используются только для примера интерфейса.'
+                : 'No real payment is processed on this demo. Data is used only for UI demonstration.'}
+            </p>
+          </div>
+        </form>
+      </div>
+    </ScreenShell>
+  )
+}
 // ADMIN
 const AdminScreen = () => {
   const lang = useLangStore((s) => s.lang)
@@ -2125,8 +2326,8 @@ const AdminScreen = () => {
         <div className="flex flex-1 flex-col items-center justify-center">
           <p className="text-sm text-slate-500">
             {isRu
-              ? 'Доступ к админ‑панели есть только у администратора (e‑mail с «admin»).'
-              : 'Admin panel is available only for accounts whose e-mail contains "admin".'}
+              ? 'Доступ к админ‑панели есть только у администратора (e‑mail admin@furniture.local, пароль admin123).'
+              : 'Admin panel is available only for the admin account (e-mail admin@furniture.local, password admin123).'}
           </p>
         </div>
       </ScreenShell>
@@ -2554,6 +2755,15 @@ function App() {
         {current === 'cart' && (
           <motion.div key="cart" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <CartScreen />
+          </motion.div>
+        )}
+        {current === 'checkout' && (
+          <motion.div
+            key="checkout"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <CheckoutScreen />
           </motion.div>
         )}
         {current === 'profile' && (
