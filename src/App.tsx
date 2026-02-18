@@ -14,7 +14,7 @@ import {
   Heart,
   ShoppingCart,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
@@ -43,6 +43,10 @@ type Product = {
   name: string
   category: 'Chairs' | 'Sofas' | 'Tables'
   price: number
+  oldPrice?: number
+  isNew?: boolean
+  isBestseller?: boolean
+  discountPercent?: number
   image: string
   description: string
   colors: ColorOption[]
@@ -227,6 +231,9 @@ const CATALOG: Product[] = [
     name: 'Aurora Lounge Chair',
     category: 'Chairs',
     price: 249,
+    oldPrice: 289,
+    discountPercent: 14,
+    isNew: true,
     image:
       'https://images.pexels.com/photos/6964073/pexels-photo-6964073.jpeg?auto=compress&cs=tinysrgb&w=800',
     description:
@@ -271,6 +278,7 @@ const CATALOG: Product[] = [
     name: 'Knot Dining Chair',
     category: 'Chairs',
     price: 189,
+    isBestseller: true,
     image:
       'https://images.pexels.com/photos/6964072/pexels-photo-6964072.jpeg?auto=compress&cs=tinysrgb&w=800',
     description:
@@ -749,6 +757,15 @@ const AuthScreen = () => {
 
   const isRu = lang === 'ru'
 
+  const passwordScore = useMemo(() => {
+    let score = 0
+    if (password.length >= 6) score++
+    if (/[0-9]/.test(password)) score++
+    if (/[A-Z]/.test(password)) score++
+    if (/[^A-Za-z0-9]/.test(password)) score++
+    return score
+  }, [password])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -863,6 +880,36 @@ const AuthScreen = () => {
                 placeholder={isRu ? 'Не менее 6 символов' : 'At least 6 characters'}
               />
             </div>
+            {mode === 'register' && (
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <div className="flex flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-1 rounded-full transition-all ${
+                      passwordScore <= 1
+                        ? 'w-1/4 bg-rose-400'
+                        : passwordScore === 2
+                          ? 'w-2/4 bg-amber-400'
+                          : 'w-3/4 bg-emerald-500'
+                    }`}
+                  />
+                </div>
+                <span className="ml-2">
+                  {password.length === 0
+                    ? ''
+                    : passwordScore <= 1
+                      ? isRu
+                        ? 'Пароль слабый'
+                        : 'Weak password'
+                      : passwordScore === 2
+                        ? isRu
+                          ? 'Нормальный'
+                          : 'Medium'
+                        : isRu
+                          ? 'Надёжный'
+                          : 'Strong'}
+                </span>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
@@ -969,6 +1016,11 @@ const HomeScreen = () => {
   const [category, setCategory] =
     useState<'All' | 'Chairs' | 'Sofas' | 'Tables'>('All')
   const [query, setQuery] = useState('')
+  const [sort, setSort] =
+    useState<'relevance' | 'price-asc' | 'price-desc'>('relevance')
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
   const openDetails = useNavStore((s) => s.openDetails)
   const goTo = useNavStore((s) => s.goTo)
   const addToCart = useCartStore((s) => s.addToCart)
@@ -978,13 +1030,33 @@ const HomeScreen = () => {
   const t = TRANSLATIONS[lang]
   const products = useProductStore((s) => s.products)
 
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 350)
+    return () => clearTimeout(timer)
+  }, [])
+
   const filtered = useMemo(() => {
-    return products.filter((p) => {
+    const min = Number(minPrice)
+    const max = Number(maxPrice)
+    const hasMin = !Number.isNaN(min) && minPrice !== ''
+    const hasMax = !Number.isNaN(max) && maxPrice !== ''
+
+    const base = products.filter((p) => {
       const matchesCategory = category === 'All' || p.category === category
       const matchesQuery = p.name.toLowerCase().includes(query.toLowerCase())
-      return matchesCategory && matchesQuery
+      const matchesMin = !hasMin || p.price >= min
+      const matchesMax = !hasMax || p.price <= max
+      return matchesCategory && matchesQuery && matchesMin && matchesMax
     })
-  }, [category, query, products])
+
+    if (sort === 'price-asc') {
+      return [...base].sort((a, b) => a.price - b.price)
+    }
+    if (sort === 'price-desc') {
+      return [...base].sort((a, b) => b.price - a.price)
+    }
+    return base
+  }, [category, query, products, sort, minPrice, maxPrice])
 
   return (
     <ScreenShell>
@@ -1015,7 +1087,7 @@ const HomeScreen = () => {
           </div>
         </div>
         {/* Search + cart */}
-        <div className="mx-auto mt-3 flex max-w-5xl items-center gap-3">
+        <div className="mx-auto mt-3 flex max-w-5xl flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -1025,7 +1097,45 @@ const HomeScreen = () => {
               className="h-9 w-full rounded-full border border-slate-200 bg-white pl-9 pr-4 text-xs text-slate-700 outline-none ring-primary/20 placeholder:text-slate-400 focus:border-primary/40 focus:ring-2"
             />
           </div>
-          <CartButton />
+          <div className="flex items-center gap-2">
+            <select
+              value={sort}
+              onChange={(e) =>
+                setSort(e.target.value as 'relevance' | 'price-asc' | 'price-desc')
+              }
+              className="h-9 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-700 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="relevance">
+                {lang === 'ru' ? 'По умолчанию' : 'Relevance'}
+              </option>
+              <option value="price-asc">
+                {lang === 'ru' ? 'Цена ↑' : 'Price ↑'}
+              </option>
+              <option value="price-desc">
+                {lang === 'ru' ? 'Цена ↓' : 'Price ↓'}
+              </option>
+            </select>
+            <CartButton />
+          </div>
+        </div>
+        {/* Price range */}
+        <div className="mx-auto mt-2 flex max-w-5xl gap-2 text-[11px] text-slate-600">
+          <input
+            type="number"
+            min={0}
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            placeholder={lang === 'ru' ? 'Цена от' : 'Price from'}
+            className="h-7 w-24 rounded-full border border-slate-200 bg-white px-3 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20"
+          />
+          <input
+            type="number"
+            min={0}
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            placeholder={lang === 'ru' ? 'до' : 'to'}
+            className="h-7 w-20 rounded-full border border-slate-200 bg-white px-3 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20"
+          />
         </div>
         {/* Categories */}
         <div className="mx-auto mt-3 flex max-w-5xl gap-2 overflow-x-auto pb-1">
@@ -1050,7 +1160,32 @@ const HomeScreen = () => {
 
       {/* Products grid */}
       <div className="flex-1">
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <motion.div
+            layout
+            className="grid grid-cols-2 gap-3 pb-8 sm:grid-cols-3 lg:grid-cols-4"
+          >
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex animate-pulse flex-col overflow-hidden rounded-2xl bg-white/60 text-left shadow-soft ring-1 ring-slate-100"
+              >
+                <div className="h-32 w-full bg-slate-200/60 sm:h-40" />
+                <div className="space-y-2 px-3 pb-3 pt-2">
+                  <div className="h-2 w-16 rounded bg-slate-200" />
+                  <div className="h-3 w-24 rounded bg-slate-200" />
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="h-3 w-10 rounded bg-slate-200" />
+                    <div className="flex gap-1">
+                      <div className="h-4 w-4 rounded-full bg-slate-200" />
+                      <div className="h-4 w-4 rounded-full bg-slate-200" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        ) : filtered.length === 0 ? (
           <div className="mt-12 text-center text-sm text-slate-500">
             No pieces found. Try a different category or name.
           </div>
@@ -1105,16 +1240,42 @@ const HomeScreen = () => {
                   </button>
                 </div>
                 <div className="flex flex-1 flex-col px-3 pb-3 pt-2">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                    {product.category}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                      {product.category}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      {product.isNew && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-[2px] text-[9px] font-semibold text-emerald-700">
+                          NEW
+                        </span>
+                      )}
+                      {product.isBestseller && (
+                        <span className="rounded-full bg-amber-100 px-2 py-[2px] text-[9px] font-semibold text-amber-700">
+                          {lang === 'ru' ? 'Хит' : 'Best'}
+                        </span>
+                      )}
+                      {product.discountPercent && (
+                        <span className="rounded-full bg-rose-100 px-2 py-[2px] text-[9px] font-semibold text-rose-700">
+                          -{product.discountPercent}%
+                        </span>
+                      )}
+      </div>
+                  </div>
                   <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-900">
                     {product.name}
                   </p>
                   <div className="mt-2 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-primary">
-                      ${product.price}
-                    </p>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold text-primary">
+                        ${product.price}
+                      </span>
+                      {product.oldPrice && product.oldPrice > product.price && (
+                        <span className="text-[10px] text-slate-400 line-through">
+                          ${product.oldPrice}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <div className="flex -space-x-1">
                         {product.colors.slice(0, 3).map((color) => (
@@ -1666,6 +1827,12 @@ const ProfileScreen = () => {
                 : 'Remove saved account on this device'
             }
             onClick={() => {
+              const ok = window.confirm(
+                lang === 'ru'
+                  ? 'Очистить сохранённый аккаунт на этом устройстве? Это действие нельзя отменить.'
+                  : 'Clear the saved account on this device? This cannot be undone.',
+              )
+              if (!ok) return
               useAuthStore.getState().reset()
               goTo('onboarding')
             }}
