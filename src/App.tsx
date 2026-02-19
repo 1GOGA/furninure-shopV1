@@ -106,6 +106,23 @@ type Translations = {
     terms: { label: string; hint: string }
     logout: { label: string; hint: string }
   }
+  settingsTitle: string
+  themeLabel: string
+  languageLabel: string
+  notificationsLabel: string
+  lightTheme: string
+  darkTheme: string
+  systemTheme: string
+  pushNotifications: string
+  emailNotifications: string
+  privacyTitle: string
+  privacyContent: string
+  termsTitle: string
+  termsContent: string
+  verifyEmailTitle: string
+  verifyEmailDescription: string
+  telegramLogin: string
+  emailLogin: string
 }
 
 const TRANSLATIONS: Record<Lang, Translations> = {
@@ -687,6 +704,13 @@ const useAuthStore = create<AuthState>()(
         if (!u) return false
         if (u.email !== email) return false
         if (u.password !== password) return false
+        // Проверяем, админ ли это при входе
+        const isAdmin =
+          email.toLowerCase() === 'admin@furniture.local' &&
+          password === 'admin123'
+        if (isAdmin) {
+          set({ user: { email, isAdmin, password } })
+        }
         return true
       },
       logout: () => set({ user: undefined }),
