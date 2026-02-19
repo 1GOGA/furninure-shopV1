@@ -30,6 +30,10 @@ type Screen =
   | 'favorites'
   | 'orders'
   | 'admin'
+  | 'settings'
+  | 'privacy'
+  | 'terms'
+  | 'emailVerification'
 
 type Lang = 'en' | 'ru'
 
@@ -163,6 +167,25 @@ const TRANSLATIONS: Record<Lang, Translations> = {
         hint: 'Sign out from this device',
       },
     },
+    settingsTitle: 'Settings',
+    themeLabel: 'Theme',
+    languageLabel: 'Language',
+    notificationsLabel: 'Notifications',
+    lightTheme: 'Light',
+    darkTheme: 'Dark',
+    systemTheme: 'System',
+    pushNotifications: 'Push notifications',
+    emailNotifications: 'Email notifications',
+    privacyTitle: 'Privacy & Policy',
+    privacyContent:
+      'Your data is protected and used only to improve our service. We do not share information with third parties without your consent. All payments are protected by PCI DSS standard.',
+    termsTitle: 'Terms & Conditions',
+    termsContent:
+      'By using our service, you agree to these terms of service. You are responsible for keeping your account credentials safe. We reserve the right to change prices and product availability. Returns are accepted within 30 days of purchase.',
+    verifyEmailTitle: 'Verify your email',
+    verifyEmailDescription: 'We sent a verification code to your email',
+    telegramLogin: 'Sign in with Telegram',
+    emailLogin: 'Sign in with email',
   },
   ru: {
     onboardingChip: 'Мебель, переосмысленная для спокойной жизни.',
@@ -222,6 +245,25 @@ const TRANSLATIONS: Record<Lang, Translations> = {
         hint: 'Завершить сеанс на этом устройстве',
       },
     },
+    settingsTitle: 'Настройки',
+    themeLabel: 'Тема',
+    languageLabel: 'Язык',
+    notificationsLabel: 'Уведомления',
+    lightTheme: 'Светлая',
+    darkTheme: 'Тёмная',
+    systemTheme: 'Система',
+    pushNotifications: 'Push-уведомления',
+    emailNotifications: 'Email-уведомления',
+    privacyTitle: 'Конфиденциальность',
+    privacyContent:
+      'Ваши данные защищены и используются только для улучшения сервиса. Мы не передаём информацию третьим лицам без вашего согласия. Все платежи защищены стандартом PCI DSS.',
+    termsTitle: 'Условия использования',
+    termsContent:
+      'Используя наш сервис, вы соглашаетесь с условиями обслуживания. Вы несёте ответственность за сохранность учётных данных. Мы оставляем право менять цены и доступность товаров. Возврат товара возможен в течение 30 дней с момента покупки.',
+    verifyEmailTitle: 'Подтвердите почту',
+    verifyEmailDescription: 'Мы отправили код подтверждения на вашу почту',
+    telegramLogin: 'Вход через Telegram',
+    emailLogin: 'Вход по почте',
   },
 }
 
@@ -712,6 +754,42 @@ const useOrderStore = create<OrderState>()(
   ),
 )
 
+// THEME STORE
+type ThemeState = {
+  theme: 'light' | 'dark' | 'system'
+  setTheme: (theme: 'light' | 'dark' | 'system') => void
+}
+
+const useThemeStore = create<ThemeState>()(
+  persist(
+    (set) => ({
+      theme: 'system',
+      setTheme: (theme) => set({ theme }),
+    }),
+    { name: 'furniture-theme' },
+  ),
+)
+
+// NOTIFICATIONS SETTINGS STORE
+type NotificationsSettingsState = {
+  pushEnabled: boolean
+  emailEnabled: boolean
+  setPushEnabled: (enabled: boolean) => void
+  setEmailEnabled: (enabled: boolean) => void
+}
+
+const useNotificationsSettingsStore = create<NotificationsSettingsState>()(
+  persist(
+    (set) => ({
+      pushEnabled: true,
+      emailEnabled: true,
+      setPushEnabled: (enabled) => set({ pushEnabled: enabled }),
+      setEmailEnabled: (enabled) => set({ emailEnabled: enabled }),
+    }),
+    { name: 'furniture-notifications-settings' },
+  ),
+)
+
 type LangState = {
   lang: Lang
   setLang: (lang: Lang) => void
@@ -802,7 +880,8 @@ const AuthScreen = () => {
         return
       }
       register(email, password)
-      goTo('home')
+      // Переходим на экран подтверждения почты
+      goTo('emailVerification')
     } else {
       const ok = login(email, password)
       if (!ok) {
@@ -948,10 +1027,34 @@ const AuthScreen = () => {
                   ? 'Войти'
                   : 'Login'}
             </button>
+            <div className="relative flex items-center gap-3 my-4">
+              <div className="flex-1 border-t border-slate-200" />
+              <span className="text-xs text-slate-400">
+                {isRu ? 'или' : 'or'}
+              </span>
+              <div className="flex-1 border-t border-slate-200" />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                register('telegram@user.local', 'telegram_' + Date.now())
+                goTo('home')
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-sm transition-colors"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295-.383 0-.64-.257-.64-.64V13.1l5.822-5.27c.252-.23-.055-.356-.39-.126l-7.19 4.532-.003.002-2.994-.936c-.648-.204-.66-.648.136-.96l11.701-4.513c.537-.196 1.006.128.836.954z" />
+              </svg>
+              {isRu ? 'Войти через Telegram' : 'Sign in with Telegram'}
+            </button>
             <button
               type="button"
               onClick={() => goTo('home')}
-              className="mt-1 w-full text-center text-[11px] text-slate-500 hover:text-slate-700"
+              className="mt-3 w-full text-center text-[11px] text-slate-500 hover:text-slate-700"
             >
               {isRu
                 ? 'Позже · продолжить как гость'
@@ -1721,6 +1824,321 @@ const CartScreen = () => {
   )
 }
 
+// SETTINGS SCREEN
+const SettingsScreen = () => {
+  const lang = useLangStore((s) => s.lang)
+  const toggleLang = useLangStore((s) => s.toggle)
+  const goTo = useNavStore((s) => s.goTo)
+  const theme = useThemeStore((s) => s.theme)
+  const setTheme = useThemeStore((s) => s.setTheme)
+  const pushEnabled = useNotificationsSettingsStore((s) => s.pushEnabled)
+  const setPushEnabled = useNotificationsSettingsStore((s) => s.setPushEnabled)
+  const emailEnabled = useNotificationsSettingsStore((s) => s.emailEnabled)
+  const setEmailEnabled = useNotificationsSettingsStore((s) => s.setEmailEnabled)
+  const isRu = lang === 'ru'
+  const t = TRANSLATIONS[lang]
+
+  return (
+    <ScreenShell>
+      <div className="flex flex-1 flex-col gap-4 pb-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => goTo('profile')}
+            className="text-xs font-medium text-slate-500 hover:text-slate-700"
+          >
+            ← {isRu ? 'Профиль' : 'Profile'}
+          </button>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            {t.settingsTitle}
+          </p>
+          <CartButton />
+        </div>
+
+        <div className="glass-card divide-y divide-slate-100">
+          {/* Theme Setting */}
+          <div className="px-5 py-4">
+            <p className="text-sm font-medium text-slate-900 mb-3">
+              {t.themeLabel}
+            </p>
+            <div className="flex gap-2">
+              {(['light', 'dark', 'system'] as const).map((th) => (
+                <button
+                  key={th}
+                  onClick={() => setTheme(th)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    theme === th
+                      ? 'bg-primary text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {isRu
+                    ? th === 'light'
+                      ? 'Светлая'
+                      : th === 'dark'
+                        ? 'Тёмная'
+                        : 'Система'
+                    : th === 'light'
+                      ? 'Light'
+                      : th === 'dark'
+                        ? 'Dark'
+                        : 'System'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Language Setting */}
+          <div className="px-5 py-4">
+            <p className="text-sm font-medium text-slate-900 mb-3">
+              {t.languageLabel}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={toggleLang}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  lang === 'en'
+                    ? 'bg-primary text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                English
+              </button>
+              <button
+                onClick={toggleLang}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  lang === 'ru'
+                    ? 'bg-primary text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Русский
+              </button>
+            </div>
+          </div>
+
+          {/* Notifications Settings */}
+          <div className="px-5 py-4">
+            <p className="text-sm font-medium text-slate-900 mb-3">
+              {t.notificationsLabel}
+            </p>
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pushEnabled}
+                  onChange={(e) => setPushEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 accent-primary"
+                />
+                <span className="text-sm text-slate-700">
+                  {t.pushNotifications}
+                </span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={emailEnabled}
+                  onChange={(e) => setEmailEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 accent-primary"
+                />
+                <span className="text-sm text-slate-700">
+                  {t.emailNotifications}
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ScreenShell>
+  )
+}
+
+// PRIVACY SCREEN
+const PrivacyScreen = () => {
+  const lang = useLangStore((s) => s.lang)
+  const goTo = useNavStore((s) => s.goTo)
+  const isRu = lang === 'ru'
+  const t = TRANSLATIONS[lang]
+
+  return (
+    <ScreenShell>
+      <div className="flex flex-1 flex-col gap-4 pb-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => goTo('profile')}
+            className="text-xs font-medium text-slate-500 hover:text-slate-700"
+          >
+            ← {isRu ? 'Профиль' : 'Profile'}
+          </button>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            {t.privacyTitle}
+          </p>
+          <CartButton />
+        </div>
+
+        <div className="glass-card px-5 py-6">
+          <div className="prose prose-sm max-w-none">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">
+              {isRu ? 'Как мы используем ваши данные' : 'How we use your data'}
+            </h2>
+            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+              {t.privacyContent}
+            </p>
+
+            <h3 className="text-base font-semibold text-slate-900 mt-6 mb-3">
+              {isRu ? 'Безопасность' : 'Security'}
+            </h3>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {isRu
+                ? 'Мы используем передовые методы шифрования для защиты ваших данных. Все соединения защищены протоколом TLS.'
+                : 'We use advanced encryption methods to protect your data. All connections are secured with TLS protocol.'}
+            </p>
+
+            <h3 className="text-base font-semibold text-slate-900 mt-6 mb-3">
+              {isRu ? 'Ваши права' : 'Your rights'}
+            </h3>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {isRu
+                ? 'Вы можете в любой момент запросить удаление ваших персональных данных или получить их копию.'
+                : 'You can request deletion of your personal data or download a copy at any time.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </ScreenShell>
+  )
+}
+
+// TERMS SCREEN
+const TermsScreen = () => {
+  const lang = useLangStore((s) => s.lang)
+  const goTo = useNavStore((s) => s.goTo)
+  const isRu = lang === 'ru'
+  const t = TRANSLATIONS[lang]
+
+  return (
+    <ScreenShell>
+      <div className="flex flex-1 flex-col gap-4 pb-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => goTo('profile')}
+            className="text-xs font-medium text-slate-500 hover:text-slate-700"
+          >
+            ← {isRu ? 'Профиль' : 'Profile'}
+          </button>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            {t.termsTitle}
+          </p>
+          <CartButton />
+        </div>
+
+        <div className="glass-card px-5 py-6">
+          <div className="prose prose-sm max-w-none">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">
+              {t.termsTitle}
+            </h2>
+            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+              {t.termsContent}
+            </p>
+
+            <h3 className="text-base font-semibold text-slate-900 mt-6 mb-3">
+              {isRu ? 'Ответственность' : 'Liability'}
+            </h3>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {isRu
+                ? 'Сервис предоставляется "как есть". Мы не несём ответственность за прямые или косвенные убытки от использования сервиса.'
+                : 'The service is provided "as is". We are not liable for any direct or indirect damages from using the service.'}
+            </p>
+
+            <h3 className="text-base font-semibold text-slate-900 mt-6 mb-3">
+              {isRu ? 'Изменения' : 'Changes'}
+            </h3>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {isRu
+                ? 'Мы оставляем право изменять условия использования. Изменения вступают в силу при размещении на сайте.'
+                : 'We reserve the right to modify these terms. Changes take effect upon posting on the website.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </ScreenShell>
+  )
+}
+
+// EMAIL VERIFICATION SCREEN
+const EmailVerificationScreen = () => {
+  const lang = useLangStore((s) => s.lang)
+  const goTo = useNavStore((s) => s.goTo)
+  const isRu = lang === 'ru'
+  const t = TRANSLATIONS[lang]
+  const user = useAuthStore((s) => s.user)
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+
+  const handleVerify = () => {
+    if (code.length !== 6) {
+      setError(isRu ? 'Код должен состоять из 6 цифр' : 'Code must be 6 digits')
+      return
+    }
+    // Simulate verification
+    setError('')
+    goTo('home')
+  }
+
+  const handleResend = () => {
+    setError(isRu ? 'Код отправлен!' : 'Code sent!')
+    setTimeout(() => setError(''), 3000)
+  }
+
+  return (
+    <ScreenShell>
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 pb-4">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">
+            {t.verifyEmailTitle}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {user?.email}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {t.verifyEmailDescription}
+          </p>
+        </div>
+
+        <div className="glass-card w-full px-5 py-6">
+          <div className="space-y-4">
+            <input
+              type="text"
+              maxLength={6}
+              placeholder="000000"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.replace(/\D/g, ''))
+                setError('')
+              }}
+              className="w-full px-4 py-3 text-2xl text-center tracking-widest rounded-lg border border-slate-200 bg-white outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 font-mono"
+            />
+            {error && (
+              <p className="text-xs text-red-500 text-center">{error}</p>
+            )}
+            <button
+              onClick={handleVerify}
+              className="primary-btn w-full py-3"
+            >
+              {isRu ? 'Подтвердить' : 'Verify'}
+            </button>
+            <button
+              onClick={handleResend}
+              className="w-full py-2 text-xs text-primary hover:text-primary/80 font-medium"
+            >
+              {isRu ? 'Отправить код снова' : 'Resend code'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </ScreenShell>
+  )
+}
+
 // PROFILE SCREEN
 const ProfileScreen = () => {
   const goTo = useNavStore((s) => s.goTo)
@@ -1770,13 +2188,7 @@ const ProfileScreen = () => {
             icon={<Settings className="h-4 w-4 text-primary" />}
             label={t.profileSections.settings.label}
             hint={t.profileSections.settings.hint}
-            onClick={() =>
-              window.alert(
-                lang === 'ru'
-                  ? 'Здесь будут настройки профиля: язык, тема, уведомления.'
-                  : 'This will be a full profile settings screen (language, theme, notifications).',
-              )
-            }
+            onClick={() => goTo('settings')}
           />
           <ProfileRow
             icon={<Bell className="h-4 w-4 text-primary" />}
@@ -1797,25 +2209,13 @@ const ProfileScreen = () => {
             icon={<Shield className="h-4 w-4 text-primary" />}
             label={t.profileSections.privacy.label}
             hint={t.profileSections.privacy.hint}
-            onClick={() =>
-              window.alert(
-                lang === 'ru'
-                  ? 'Здесь могла бы быть подробная политика конфиденциальности.'
-                  : 'This is a placeholder for a full privacy policy page.',
-              )
-            }
+            onClick={() => goTo('privacy')}
           />
           <ProfileRow
             icon={<FileText className="h-4 w-4 text-primary" />}
             label={t.profileSections.terms.label}
             hint={t.profileSections.terms.hint}
-            onClick={() =>
-              window.alert(
-                lang === 'ru'
-                  ? 'Здесь будут размещены условия использования сервиса.'
-                  : 'This is a placeholder for full terms & conditions.',
-              )
-            }
+            onClick={() => goTo('terms')}
           />
           <ProfileRow
             icon={<LogOut className="h-4 w-4 text-accent" />}
@@ -1914,10 +2314,10 @@ const NotificationsScreen = () => {
       <div className="flex flex-1 flex-col gap-4 pb-4">
         <div className="flex items-center justify-between">
           <button
-            onClick={() => goTo('home')}
+            onClick={() => goTo('profile')}
             className="text-xs font-medium text-slate-500 hover:text-slate-700"
           >
-            ← {isRu ? 'Назад' : 'Back'}
+            ← {isRu ? 'Профиль' : 'Profile'}
           </button>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             {isRu ? 'Уведомления' : 'Notifications'}
@@ -2801,6 +3201,30 @@ function App() {
         {current === 'admin' && (
           <motion.div key="admin" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <AdminScreen />
+          </motion.div>
+        )}
+        {current === 'settings' && (
+          <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SettingsScreen />
+          </motion.div>
+        )}
+        {current === 'privacy' && (
+          <motion.div key="privacy" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <PrivacyScreen />
+          </motion.div>
+        )}
+        {current === 'terms' && (
+          <motion.div key="terms" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <TermsScreen />
+          </motion.div>
+        )}
+        {current === 'emailVerification' && (
+          <motion.div
+            key="emailVerification"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <EmailVerificationScreen />
           </motion.div>
         )}
       </AnimatePresence>
